@@ -16,15 +16,14 @@ from models import TSN
 from transforms import *
 from opts import parser
 import datasets_video
+import datetime
 
+global best_prec1
 best_prec1 = 0
 
 
 def main():
-    global args, best_prec1
-    args = parser.parse_args()
     check_rootfolders()
-
     categories, args.train_list, args.val_list, args.root_path, prefix = datasets_video.return_dataset(args.dataset,
                                                                                                        args.modality)
     num_class = len(categories)
@@ -74,7 +73,7 @@ def main():
         data_length = args.num_motion
 
     train_loader = torch.utils.data.DataLoader(
-        TSNDataSet(args.root_path, args.train_list, num_segments=args.num_segments,
+        TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/jester/data", args.train_list, num_segments=args.num_segments,
                    new_length=data_length,
                    modality=args.modality,
                    image_tmpl=prefix,
@@ -90,7 +89,7 @@ def main():
         num_workers=args.workers, pin_memory=False)
 
     val_loader = torch.utils.data.DataLoader(
-        TSNDataSet(args.root_path, args.val_list, num_segments=args.num_segments,
+        TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/jester/data", args.val_list, num_segments=args.num_segments,
                    new_length=data_length,
                    modality=args.modality,
                    image_tmpl=prefix,
@@ -153,6 +152,28 @@ def main():
             }, is_best)
 
 
+def test():
+    check_rootfolders()
+    categories, _, _, _, prefix = datasets_video.return_dataset(args.dataset,
+                                                                            args.modality)
+    num_class = len(categories)
+
+    args.store_name = '_'.join(['STModeling', args.dataset, args.modality, args.arch, args.consensus_type,
+                                'segment%d' % args.num_segments])
+    print('storing name: ' + args.store_name)
+
+    model = TSN(num_class, args)
+
+    crop_size = model.crop_size
+    scale_size = model.scale_size
+    input_mean = model.input_mean
+    input_std = model.input_std
+    train_augmentation = model.get_augmentation()
+
+    policies = model.get_optim_policies()
+    model = torch.nn.DataParallel(model, device_ids=args.gpus).cuda()
+
+
 def train(train_loader, model, criterion, optimizer, epoch, log):
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -189,7 +210,7 @@ def train(train_loader, model, criterion, optimizer, epoch, log):
             loss = criterion(output, target_var)
 
         # measure accuracy and record loss
-        prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
+        prec1, prec5 = accuracy(output.data, target, topk=(1, 4))
         losses.update(loss.data.item(), input.size(0))
         top1.update(prec1.item(), input.size(0))
         top5.update(prec5.item(), input.size(0))
@@ -208,12 +229,12 @@ def train(train_loader, model, criterion, optimizer, epoch, log):
         end = time.time()
 
         if i % args.print_freq == 0:
-            output = ('Epoch: [{0}][{1}/{2}], lr: {lr:.5f}\t'
-                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                      'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                      'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+            output = str(datetime.datetime.now()) + (' Epoch: [{0}][{1}/{2}], lr: {lr:.5f}\t'
+                                                     'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                                                     'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+                                                     'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                                                     'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                                                     'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
                 epoch, i, len(train_loader), batch_time=batch_time,
                 data_time=data_time, loss=losses, top1=top1, top5=top5, lr=optimizer.param_groups[-1]['lr']))
             print(output)
@@ -245,7 +266,7 @@ def validate(val_loader, model, criterion, iter, log):
                 loss = criterion(output, target_var)
 
             # measure accuracy and record loss
-            prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
+            prec1, prec5 = accuracy(output.data, target, topk=(1, 4))
 
         losses.update(loss.item(), input.size(0))
         top1.update(prec1.item(), input.size(0))
@@ -256,11 +277,11 @@ def validate(val_loader, model, criterion, iter, log):
         end = time.time()
 
         if i % args.print_freq == 0:
-            output = ('Test: [{0}/{1}]\t'
-                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                      'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-                      'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
+            output = str(datetime.datetime.now()) + (' Test: [{0}/{1}]\t'
+                                                     'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                                                     'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                                                     'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
+                                                     'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
                 i, len(val_loader), batch_time=batch_time, loss=losses,
                 top1=top1, top5=top5))
             print(output)
@@ -336,7 +357,12 @@ def count_parameters(model):
 
 def check_rootfolders():
     """Create log and model folder"""
-    folders_util = [args.root_log, args.root_model, args.root_output]
+    folders_util = []
+    if args.run_for == 'train':
+        folders_util = [args.root_log, args.root_model, args.root_output]
+    elif args.run_for == 'test':
+        folders_util = [args.root_test_input]
+
     for folder in folders_util:
         if not os.path.exists(folder):
             print('creating folder ' + folder)
@@ -344,4 +370,11 @@ def check_rootfolders():
 
 
 if __name__ == '__main__':
-    main()
+    global args
+    args = parser.parse_args()
+    if args.run_for == 'train':
+        main()
+    elif args.run_for == 'test':
+        test()
+    else:
+        print("--run_for mast be 'train' or 'test'")

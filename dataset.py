@@ -53,6 +53,7 @@ class TSNDataSet(data.Dataset):
     def _load_image(self, directory, idx, isLast=False):
         if self.modality == 'RGB' or self.modality == 'RGBDiff':
             try:
+                #print("loaded ", os.path.join(self.root_path, "rgb", directory, self.image_tmpl.format(idx)))
                 return [Image.open(os.path.join(self.root_path, "rgb", directory, self.image_tmpl.format(idx))).convert(
                     'RGB')]
             except Exception:

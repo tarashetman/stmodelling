@@ -1,0 +1,1 @@
+was used for training - python main.py jester RGB --arch BNInception --num_segments 8 --consensus_type TRNmultiscale --batch-size 10 --print-freq 283

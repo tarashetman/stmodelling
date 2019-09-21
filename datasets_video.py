@@ -3,7 +3,7 @@ import torch
 import torchvision
 import torchvision.datasets as datasets
 
-ROOT_DATASET = '/stmodeling'
+ROOT_DATASET = '/home/machine/PROJECTS/OTHER/fubel/stmodeling'
 
 
 def return_jester(modality):
