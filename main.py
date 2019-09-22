@@ -24,8 +24,13 @@ best_prec1 = 0
 
 def main():
     check_rootfolders()
-    categories, args.train_list, args.val_list, args.root_path, prefix = datasets_video.return_dataset(args.dataset,
-                                                                                                       args.modality)
+    if args.run_for == 'train':
+        categories, args.train_list, args.val_list, args.root_path, prefix = datasets_video.return_dataset(args.dataset,
+                                                                                                           args.modality
+                                                                                                           )
+    elif args.run_for == 'test':
+        categories, args.test_list, args.root_path, prefix = datasets_video.return_data(args.dataset, args.modality)
+
     num_class = len(categories)
 
     args.store_name = '_'.join(['STModeling', args.dataset, args.modality, args.arch, args.consensus_type,
@@ -71,107 +76,117 @@ def main():
         data_length = 5
     elif args.modality == 'RGBFlow':
         data_length = args.num_motion
+    
+    if args.run_for == 'train':
+        train_loader = torch.utils.data.DataLoader(
+            TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/jester/data", args.train_list,
+                       num_segments=args.num_segments,
+                       new_length=data_length,
+                       modality=args.modality,
+                       image_tmpl=prefix,
+                       dataset=args.dataset,
+                       transform=torchvision.transforms.Compose([
+                           train_augmentation,
+                           Stack(roll=(args.arch in ['BNInception', 'InceptionV3']),
+                                 isRGBFlow=(args.modality == 'RGBFlow')),
+                           ToTorchFormatTensor(div=(args.arch not in ['BNInception', 'InceptionV3'])),
+                           normalize,
+                       ])),
+            batch_size=args.batch_size, shuffle=True,
+            num_workers=args.workers, pin_memory=False)
 
-    train_loader = torch.utils.data.DataLoader(
-        TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/jester/data", args.train_list, num_segments=args.num_segments,
-                   new_length=data_length,
-                   modality=args.modality,
-                   image_tmpl=prefix,
-                   dataset=args.dataset,
-                   transform=torchvision.transforms.Compose([
-                       train_augmentation,
-                       Stack(roll=(args.arch in ['BNInception', 'InceptionV3']),
-                             isRGBFlow=(args.modality == 'RGBFlow')),
-                       ToTorchFormatTensor(div=(args.arch not in ['BNInception', 'InceptionV3'])),
-                       normalize,
-                   ])),
-        batch_size=args.batch_size, shuffle=True,
-        num_workers=args.workers, pin_memory=False)
+        val_loader = torch.utils.data.DataLoader(
+            TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/jester/data", args.val_list,
+                       num_segments=args.num_segments,
+                       new_length=data_length,
+                       modality=args.modality,
+                       image_tmpl=prefix,
+                       dataset=args.dataset,
+                       random_shift=False,
+                       transform=torchvision.transforms.Compose([
+                           GroupScale(int(scale_size)),
+                           GroupCenterCrop(crop_size),
+                           Stack(roll=(args.arch in ['BNInception', 'InceptionV3']),
+                                 isRGBFlow=(args.modality == 'RGBFlow')),
+                           ToTorchFormatTensor(div=(args.arch not in ['BNInception', 'InceptionV3'])),
+                           normalize,
+                       ])),
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=False)
 
-    val_loader = torch.utils.data.DataLoader(
-        TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/jester/data", args.val_list, num_segments=args.num_segments,
-                   new_length=data_length,
-                   modality=args.modality,
-                   image_tmpl=prefix,
-                   dataset=args.dataset,
-                   random_shift=False,
-                   transform=torchvision.transforms.Compose([
-                       GroupScale(int(scale_size)),
-                       GroupCenterCrop(crop_size),
-                       Stack(roll=(args.arch in ['BNInception', 'InceptionV3']),
-                             isRGBFlow=(args.modality == 'RGBFlow')),
-                       ToTorchFormatTensor(div=(args.arch not in ['BNInception', 'InceptionV3'])),
-                       normalize,
-                   ])),
-        batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=False)
+        # define loss function (criterion) and optimizer
+        if args.loss_type == 'nll':
+            criterion = torch.nn.CrossEntropyLoss().cuda()
+        else:
+            raise ValueError("Unknown loss type")
 
-    # define loss function (criterion) and optimizer
-    if args.loss_type == 'nll':
-        criterion = torch.nn.CrossEntropyLoss().cuda()
-    else:
-        raise ValueError("Unknown loss type")
+        for group in policies:
+            print(('group: {} has {} params, lr_mult: {}, decay_mult: {}'.format(
+                group['name'], len(group['params']), group['lr_mult'], group['decay_mult'])))
 
-    for group in policies:
-        print(('group: {} has {} params, lr_mult: {}, decay_mult: {}'.format(
-            group['name'], len(group['params']), group['lr_mult'], group['decay_mult'])))
+        optimizer = torch.optim.SGD(policies,
+                                    args.lr,
+                                    momentum=args.momentum,
+                                    weight_decay=args.weight_decay)
 
-    optimizer = torch.optim.SGD(policies,
-                                args.lr,
-                                momentum=args.momentum,
-                                weight_decay=args.weight_decay)
+        if args.consensus_type == 'DNDF':
+            params = [p for p in model.parameters() if p.requires_grad]
+            optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay=1e-5)
 
-    if args.consensus_type == 'DNDF':
-        params = [p for p in model.parameters() if p.requires_grad]
-        optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay=1e-5)
+        if args.evaluate:
+            validate(val_loader, model, criterion, 0)
+            return
 
-    if args.evaluate:
-        validate(val_loader, model, criterion, 0)
-        return
+        log_training = open(os.path.join(args.root_log, '%s.csv' % args.store_name), 'w')
+        for epoch in range(args.start_epoch, args.epochs):
+            if not args.consensus_type == 'DNDF':
+                adjust_learning_rate(optimizer, epoch, args.lr_steps)
 
-    log_training = open(os.path.join(args.root_log, '%s.csv' % args.store_name), 'w')
-    for epoch in range(args.start_epoch, args.epochs):
-        if not args.consensus_type == 'DNDF':
-            adjust_learning_rate(optimizer, epoch, args.lr_steps)
+            # train for one epoch
+            train(train_loader, model, criterion, optimizer, epoch, log_training)
 
-        # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, log_training)
+            # evaluate on validation set
+            if (epoch + 1) % args.eval_freq == 0 or epoch == args.epochs - 1:
+                prec1 = validate(val_loader, model, criterion, (epoch + 1) * len(train_loader), log_training)
 
-        # evaluate on validation set
-        if (epoch + 1) % args.eval_freq == 0 or epoch == args.epochs - 1:
-            prec1 = validate(val_loader, model, criterion, (epoch + 1) * len(train_loader), log_training)
+                # remember best prec@1 and save checkpoint
+                is_best = prec1 > best_prec1
+                best_prec1 = max(prec1, best_prec1)
+                save_checkpoint({
+                    'epoch': epoch + 1,
+                    'arch': args.arch,
+                    'state_dict': model.state_dict(),
+                    'best_prec1': best_prec1,
+                }, is_best)
 
-            # remember best prec@1 and save checkpoint
-            is_best = prec1 > best_prec1
-            best_prec1 = max(prec1, best_prec1)
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'arch': args.arch,
-                'state_dict': model.state_dict(),
-                'best_prec1': best_prec1,
-            }, is_best)
+    elif args.run_for == 'test':
+        print("=> loading checkpoint '{}'".format(args.root_weights))
+        checkpoint = torch.load(args.root_weights)
+        args.start_epoch = checkpoint['epoch']
+        best_prec1 = checkpoint['best_prec1']
+        model.load_state_dict(checkpoint['state_dict'])
+        model.cuda().eval()
 
-
-def test():
-    check_rootfolders()
-    categories, _, _, _, prefix = datasets_video.return_dataset(args.dataset,
-                                                                            args.modality)
-    num_class = len(categories)
-
-    args.store_name = '_'.join(['STModeling', args.dataset, args.modality, args.arch, args.consensus_type,
-                                'segment%d' % args.num_segments])
-    print('storing name: ' + args.store_name)
-
-    model = TSN(num_class, args)
-
-    crop_size = model.crop_size
-    scale_size = model.scale_size
-    input_mean = model.input_mean
-    input_std = model.input_std
-    train_augmentation = model.get_augmentation()
-
-    policies = model.get_optim_policies()
-    model = torch.nn.DataParallel(model, device_ids=args.gpus).cuda()
+        print("=> loaded checkpoint ")
+        test_loader = torch.utils.data.DataLoader(
+            TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/jester/data", args.test_list,
+                       num_segments=args.num_segments,
+                       new_length=data_length,
+                       modality=args.modality,
+                       image_tmpl=prefix,
+                       dataset=args.dataset,
+                       random_shift=False,
+                       transform=torchvision.transforms.Compose([
+                           GroupScale(int(scale_size)),
+                           GroupCenterCrop(crop_size),
+                           Stack(roll=(args.arch in ['BNInception', 'InceptionV3']),
+                                 isRGBFlow=(args.modality == 'RGBFlow')),
+                           ToTorchFormatTensor(div=(args.arch not in ['BNInception', 'InceptionV3'])),
+                           normalize,
+                       ])),
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=False)
+        test(test_loader, model, categories)
 
 
 def train(train_loader, model, criterion, optimizer, epoch, log):
@@ -299,6 +314,22 @@ def validate(val_loader, model, criterion, iter, log):
     return top1.avg
 
 
+def test(test_loader, model, categories):
+    for i, (input, _) in enumerate(test_loader):
+        with torch.no_grad():
+            input_var = torch.autograd.Variable(input)
+
+            # compute output
+            output = model(input_var)
+            h_x = torch.mean(F.softmax(output, 1), dim=0).data
+            probs, idx = h_x.sort(0, True)
+            # Output the prediction.
+            print('RESULT ON')
+            for i in range(0, len(categories)):
+                print('{:.3f} -> {}'.format(probs[i], categories[idx[i]]))
+                pass
+
+
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     torch.save(state, '%s/%s_checkpoint.pth.tar' % (args.root_model, args.store_name))
     if is_best:
@@ -372,9 +403,4 @@ def check_rootfolders():
 if __name__ == '__main__':
     global args
     args = parser.parse_args()
-    if args.run_for == 'train':
-        main()
-    elif args.run_for == 'test':
-        test()
-    else:
-        print("--run_for mast be 'train' or 'test'")
+    main()
