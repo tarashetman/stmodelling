@@ -1,17 +1,17 @@
 import argparse
 
 parser = argparse.ArgumentParser(description="PyTorch implementation of Temporal Segment Networks")
-parser.add_argument('dataset', type=str, choices=['something', 'jester', 'nvgesture', 'chalearn'])
-parser.add_argument('modality', type=str, choices=['RGB', 'Flow', 'RGBDiff', 'RGBFlow'])
+parser.add_argument('--dataset', type=str, choices=['something', 'jester', 'nvgesture', 'chalearn'], default='jester')
+parser.add_argument('--modality', type=str, choices=['RGB', 'Flow', 'RGBDiff', 'RGBFlow'], default='RGB')
 parser.add_argument('--train_list', type=str, default="")
 parser.add_argument('--val_list', type=str, default="")
 parser.add_argument('--root_path', type=str, default="")
 parser.add_argument('--store_name', type=str, default="")
 # ========================= Model Configs ==========================
 parser.add_argument('--arch', type=str, default="BNInception")
-parser.add_argument('--num_segments', type=int, default=4)
+parser.add_argument('--num_segments', type=int, default=8)
 parser.add_argument('--num_motion', type=int, default=3)
-parser.add_argument('--consensus_type', type=str, default='avg')
+parser.add_argument('--consensus_type', type=str, default='TRNmultiscale')
 parser.add_argument('--k', type=int, default=3)
 
 parser.add_argument('--dropout', '--do', default=0.3, type=float,
@@ -28,7 +28,7 @@ parser.add_argument('--rnn_dropout', default=0.2, type=float,
 # ========================= Learning Configs ==========================
 parser.add_argument('--epochs', default=40, type=int, metavar='N',
                     help='number of total epochs to run')
-parser.add_argument('-b', '--batch-size', default=128, type=int,
+parser.add_argument('-b', '--batch-size', default=10, type=int,
                     metavar='N', help='mini-batch size (default: 256)')
 parser.add_argument('--lr', '--learning-rate', default=0.001, type=float,
                     metavar='LR', help='initial learning rate')
@@ -43,7 +43,7 @@ parser.add_argument('--clip-gradient', '--gd', default=20, type=float,
 parser.add_argument('--no_partialbn', '--npb', default=False, action="store_true")
 
 # ========================= Monitor Configs ==========================
-parser.add_argument('--print-freq', '-p', default=10, type=int,
+parser.add_argument('--print-freq', '-p', default=238, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--eval-freq', '-ef', default=1, type=int,
                     metavar='N', help='evaluation frequency (default: 5)')

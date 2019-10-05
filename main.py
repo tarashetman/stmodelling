@@ -1,7 +1,10 @@
 import argparse
+import cv2
 import os
 import time
 import shutil
+
+import numpy as np
 import torch
 import torchvision
 import torch.nn.parallel
@@ -61,7 +64,7 @@ def main():
         else:
             print(("=> no checkpoint found at '{}'".format(args.resume)))
 
-    print(model)
+    #print(model)
     cudnn.benchmark = True
 
     # Data loading code
@@ -166,8 +169,8 @@ def main():
         best_prec1 = checkpoint['best_prec1']
         model.load_state_dict(checkpoint['state_dict'])
         model.cuda().eval()
-
         print("=> loaded checkpoint ")
+
         test_loader = torch.utils.data.DataLoader(
             TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/jester/data", args.test_list,
                        num_segments=args.num_segments,
@@ -186,6 +189,30 @@ def main():
                        ])),
             batch_size=args.batch_size, shuffle=False,
             num_workers=args.workers, pin_memory=False)
+
+        # cam = cv2.VideoCapture(0)
+        # cam.set(cv2.CAP_PROP_FPS, 48)
+
+        # for i, (input, _) in enumerate(test_loader):
+        #     with torch.no_grad():
+        #         input_var = torch.autograd.Variable(input)
+        #
+        # ret, frame = cam.read()
+        # frame_map = np.full((280, 640, 3), 0, np.uint8)
+        # frame_map = frame
+        # print(frame_map)
+        # while (True):
+        #     bg = np.full((480, 1200, 3), 15, np.uint8)
+        #     bg[:480, :640] = frame
+        #
+        #     font = cv2.FONT_HERSHEY_SIMPLEX
+        #     # cv2.rectangle(bg, (128, 48), (640 - 128, 480 - 48), (0, 255, 0), 3)
+        #
+        #     cv2.imshow('preview', bg)
+        #
+        #     if cv2.waitKey(1) & 0xFF == ord('q'):
+        #         break
+
         test(test_loader, model, categories)
 
 

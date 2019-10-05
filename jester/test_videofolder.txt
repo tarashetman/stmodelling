@@ -1,1 +1,1 @@
-taras_zoom 38 0
+taras_zoom 10 0

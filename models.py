@@ -19,9 +19,9 @@ class TSN(nn.Module):
         self.dropout = args.dropout
         self.dataset = args.dataset
         self.crop_num = 1
-        self.consensus_type = args.consensus_type
+        self.consensus_type = args.consensus_type # LSTM etc.
         self.img_feature_dim = args.img_feature_dim  # the dimension of the CNN feature to represent each frame
-        base_model = args.arch
+        base_model = args.arch  # resnet etc.
         nhidden = 512
         print_spec = True
         new_length = None
