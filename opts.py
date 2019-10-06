@@ -1,7 +1,7 @@
 import argparse
 
 parser = argparse.ArgumentParser(description="PyTorch implementation of Temporal Segment Networks")
-parser.add_argument('--dataset', type=str, choices=['something', 'jester', 'nvgesture', 'chalearn'], default='jester')
+parser.add_argument('--dataset', type=str, choices=['something', 'jester', 'nvgesture', 'chalearn', 'kussaster'], default='jester')
 parser.add_argument('--modality', type=str, choices=['RGB', 'Flow', 'RGBDiff', 'RGBFlow'], default='RGB')
 parser.add_argument('--train_list', type=str, default="")
 parser.add_argument('--val_list', type=str, default="")

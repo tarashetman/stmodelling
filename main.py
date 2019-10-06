@@ -13,6 +13,7 @@ import torch.optim
 import torch.nn.functional as F
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data.sampler import SequentialSampler
+import matplotlib.pyplot as plt
 
 from dataset import TSNDataSet
 from models import TSN
@@ -21,12 +22,15 @@ from opts import parser
 import datasets_video
 import datetime
 
-global best_prec1
+#
 best_prec1 = 0
+avg_losses = []
+plt.ylabel('loss')
 
 
 def main():
     check_rootfolders()
+    global best_prec1
     if args.run_for == 'train':
         categories, args.train_list, args.val_list, args.root_path, prefix = datasets_video.return_dataset(args.dataset,
                                                                                                            args.modality
@@ -82,7 +86,7 @@ def main():
     
     if args.run_for == 'train':
         train_loader = torch.utils.data.DataLoader(
-            TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/jester/data", args.train_list,
+            TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/kussaster/data", args.train_list,
                        num_segments=args.num_segments,
                        new_length=data_length,
                        modality=args.modality,
@@ -99,7 +103,7 @@ def main():
             num_workers=args.workers, pin_memory=False)
 
         val_loader = torch.utils.data.DataLoader(
-            TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/jester/data", args.val_list,
+            TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/kussaster/data", args.val_list,
                        num_segments=args.num_segments,
                        new_length=data_length,
                        modality=args.modality,
@@ -172,7 +176,7 @@ def main():
         print("=> loaded checkpoint ")
 
         test_loader = torch.utils.data.DataLoader(
-            TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/jester/data", args.test_list,
+            TSNDataSet("/home/machine/PROJECTS/OTHER/DATASETS/kussaster/data", args.test_list,
                        num_segments=args.num_segments,
                        new_length=data_length,
                        modality=args.modality,
@@ -280,6 +284,10 @@ def train(train_loader, model, criterion, optimizer, epoch, log):
                 epoch, i, len(train_loader), batch_time=batch_time,
                 data_time=data_time, loss=losses, top1=top1, top5=top5, lr=optimizer.param_groups[-1]['lr']))
             print(output)
+            avg_losses.append(losses.avg)
+            plt.plot(avg_losses)
+            plt.savefig('loss.png')
+            plt.clf()
             log.write(output + '\n')
             log.flush()
 

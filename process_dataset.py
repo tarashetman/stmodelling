@@ -14,7 +14,7 @@
 import os
 import pdb
 
-dataset_name = 'jester-v1'
+dataset_name = 'kussaster-v1'
 with open('%s-labels.csv' % dataset_name) as f:
     lines = f.readlines()
 categories = []
@@ -48,7 +48,7 @@ for (filename_input, filename_output) in zip(files_input, files_output):
         curFolder = folders[i]
         curIDX = idx_categories[i]
         # counting the number of frames in each video folders
-        dir_files = os.listdir(os.path.join("/home/machine/PROJECTS/OTHER/DATASETS/jester/data/rgb", curFolder))
+        dir_files = os.listdir(os.path.join("/home/machine/PROJECTS/OTHER/DATASETS/kussaster/data/rgb", curFolder))
         output.append('%s %d %d' % (curFolder, len(dir_files)-1, int(curIDX)))
         print('%d/%d' % (i, len(folders)))
     with open(filename_output, 'w') as f:
